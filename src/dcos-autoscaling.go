@@ -2,6 +2,7 @@ package main
 
 import (
 	"dcosautoscaling"
+	"log"
 	"sync"
 	"time"
 )
@@ -15,6 +16,7 @@ func main() {
 		var wg sync.WaitGroup
 		wg.Add(len(managedApplications))
 
+		log.Printf("Managed applications %s", managedApplications)
 		for _, application := range managedApplications {
 			go func() {
 				application.GetStatistics()

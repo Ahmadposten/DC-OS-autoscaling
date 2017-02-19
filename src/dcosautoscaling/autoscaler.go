@@ -81,7 +81,7 @@ func (a Application) Scale() error {
 		return err
 	}
 
-	url := fmt.Sprintf("http://marathon.mesos/v2/apps%s", a.Id)
+	url := fmt.Sprintf("http://marathon.mesos:8080/v2/apps%s", a.Id)
 
 	body := fmt.Sprintf("{\"instances\":%s}", a.Desired)
 	response, reqerr := Call("PUT", url, body)
@@ -214,7 +214,7 @@ func (a Application) GetStatistics() (Stat, error) {
 }
 
 func GetAll() ([]Application, error) {
-	response, err := Call("GET", "http://marathon.mesos/api/v2/apps", "")
+	response, err := Call("GET", "http://marathon.mesos:8080/api/v2/apps", "")
 	var applications []Application
 
 	if err != nil {
@@ -235,7 +235,9 @@ func Call(method string, url string, body string) (string, error) {
 		return "", httperr
 	}
 
-	client := http.Client{}
+	client := http.Client{
+		Timeout: time.Duration(3 * time.Second),
+	}
 
 	resp, reqerr := client.Do(req)
 	if reqerr != nil {
@@ -291,6 +293,7 @@ func (a Application) SyncRules() {
 					a.Policies = append(a.Policies, newrule)
 				}
 				takenRules[ruleNumber] = true
+				log.Print(fmt.Sprintf("Syncing table for %s %s", a.Id, newrule))
 			}
 		}
 	}
