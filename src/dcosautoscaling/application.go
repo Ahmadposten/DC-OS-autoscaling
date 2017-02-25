@@ -1,12 +1,9 @@
 package dcosautoscaling
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"regexp"
 	"strconv"
 	"time"
@@ -19,34 +16,17 @@ const (
 	LESS_THAN    = "lt"
 )
 
-type MarathonAppsResponse struct {
-	Apps []Application `json:"apps"`
-}
-
-type MarathonAppResponse struct {
-	App Application `json:"app"`
-}
-
-type MesosStat struct {
-	ExecutorId string `json:"executor_id"`
-	Statistics struct {
-		CPUlimit          float64 `json:"cpus_limit"`
-		CPUSystemTimeSecs float64 `json:"cpus_system_time_secs"`
-		CPUUserTimeSecs   float64 `json:"cpus_user_time_secs"`
-		MemLimit          float64 `json:"mem_limit_bytes"`
-		MemRSS            float64 `json:"mem_rss_bytes"`
-		Timestamp         float64 `json:"timestamp"`
-	} `json:"statistics"`
-}
-
-type Stat struct {
-	CpuUsage float64
-	MemUsage float64
-}
-
 type ApplicationInterface interface {
 	Scale() error
 	GetStatistics() (Stat, error)
+}
+
+type ApplicationError struct {
+	s string
+}
+
+func (e ApplicationError) Error() string {
+	return e.s
 }
 
 type Application struct {
@@ -65,37 +45,6 @@ type Application struct {
 		LastScalingAt      string `json:"lastScalingAt"`
 		LastConfigChangeAt string `json:"lastConfigChangeAt"`
 	} `json:"versionInfo"`
-}
-
-type Policy struct {
-	Type      string
-	Threshold float64
-	Interval  int
-	Samples   int
-	Operator  string
-	Action    string
-}
-
-type Task struct {
-	Id    string `json:"id"`
-	Agent string `json:"slaveId"`
-	Host  string `json:"host"`
-}
-
-type ApplicationError struct {
-	s string
-}
-
-func (e ApplicationError) Error() string {
-	return e.s
-}
-
-type HTTPResponseError struct {
-	s string
-}
-
-func (e HTTPResponseError) Error() string {
-	return e.s
 }
 
 func (a *Application) GetAppDetails() error {
@@ -289,28 +238,6 @@ func GetDeltas(slave Task) (float64, float64, error) {
 	return cpuUsage, memoryUsage, nil
 }
 
-func FindTaskStat(task Task, stats []MesosStat) (MesosStat, error) {
-	for _, v := range stats {
-		if v.ExecutorId == task.Id {
-			return v, nil
-		}
-	}
-	return MesosStat{}, ApplicationError{fmt.Sprint("Could not find the task ", task)}
-}
-
-func Average(arr []float64) float64 {
-	var total float64
-
-	for _, v := range arr {
-		total += v
-	}
-	if len(arr) == 0 {
-		return 0
-	}
-
-	return total / float64(len(arr))
-}
-
 func (a *Application) GetStatistics() (Stat, error) {
 	var cpuValues []float64
 	var memValues []float64
@@ -351,42 +278,6 @@ func GetAll() ([]Application, error) {
 
 	applications = marathonApps.Apps
 	return applications, jsonErr
-}
-
-func Call(method string, url string, body string) (string, error) {
-
-	req, httperr := http.NewRequest(method, url, bytes.NewBuffer([]byte(body)))
-
-	if httperr != nil {
-		log.Printf("http creating http request to %s: ", url, httperr)
-		return "", httperr
-	}
-
-	client := http.Client{
-		Timeout: time.Duration(3 * time.Second),
-	}
-
-	resp, reqerr := client.Do(req)
-
-	if reqerr != nil {
-		log.Printf("Calling executing http request to %s: ", url, reqerr)
-		return "", reqerr
-	}
-	defer resp.Body.Close()
-
-	responseString, err := ioutil.ReadAll(resp.Body)
-
-	if err != nil {
-		return "", nil
-	}
-
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		error := HTTPResponseError{fmt.Sprintf("Response code is %d", resp.StatusCode)}
-		log.Printf("A no success response calling %s: %d ", url, resp.StatusCode)
-		return string(responseString), error
-	}
-
-	return string(responseString), nil
 }
 
 func (a *Application) InitializeScalable() {

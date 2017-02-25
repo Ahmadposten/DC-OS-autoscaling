@@ -14,7 +14,7 @@ WORKDIR $dir
 Add . $dir
 
 RUN apk update && \
-    apk add --no-cache git bzr go && go build src/dcos-autoscaling.go && \
+    apk add --no-cache git bzr go && go build dcos-autoscaling.go && \
     apk del git bzr go python git && \
     rm -rf $dir/src $dir/pkg
 
