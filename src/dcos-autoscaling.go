@@ -2,46 +2,79 @@ package main
 
 import (
 	"dcosautoscaling"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 )
 
 func main() {
+	var managedApplications []dcosautoscaling.Application
 	for {
 
 		allApplications, _ := dcosautoscaling.GetAll()
-		managedApplications := GetScalable(allApplications)
+		GetScalable(allApplications, &managedApplications)
 
 		var wg sync.WaitGroup
+		log.Print(fmt.Sprintf("Got %d Managed apps ", len(managedApplications)))
 		wg.Add(len(managedApplications))
 
-		log.Printf("Managed applications %s", managedApplications)
-		for _, application := range managedApplications {
-			go func() {
+		for k, application := range managedApplications {
+			go func(wg *sync.WaitGroup) {
+				application.SyncRules()
 				application.GetStatistics()
 				application.CalibrateDesired()
 				if application.Instances != application.Desired {
 					application.Adapt()
 				}
-			}()
+				managedApplications[k] = application
+				wg.Done()
+			}(&wg)
 		}
 		wg.Wait()
 		time.Sleep(1 * time.Second)
-		// Through a go routing for everyone of them to check and scale
 	}
 }
 
 // Gets applications which are scalable
-func GetScalable(applications []dcosautoscaling.Application) []dcosautoscaling.Application {
-	var currentScalables []dcosautoscaling.Application
-	for _, application := range applications {
-		if application.IsScalable() {
-			application.SyncRules()
-			currentScalables = append(currentScalables, application)
+func GetScalable(applications []dcosautoscaling.Application, currentScalables *[]dcosautoscaling.Application) {
+	knownLookups := make(map[string]bool)
+	for _, v := range *currentScalables {
+		knownLookups[v.Id] = true
+	}
+	allLookups := make(map[string]bool)
+	for _, v := range applications {
+		if v.Instances > 0 {
+			allLookups[v.Id] = true
 		}
 	}
 
-	// Remove the deleted apps
-	return currentScalables
+	var remainingScalables []dcosautoscaling.Application
+
+	// Remove the deleted apps and reset the
+	for _, knownApp := range *currentScalables {
+		_, found := allLookups[knownApp.Id]
+
+		lastConfigChange, _ := time.Parse(time.RFC3339, knownApp.VersionInfo.LastConfigChangeAt)
+
+		knownApp.GetAppDetails()
+		configChanged := int(lastConfigChange.Unix()) > knownApp.UpdatedAt
+
+		if !found || configChanged { // App has just changed
+			log.Printf("App %s is deleted or has it's configurations changed", knownApp.Id)
+			delete(knownLookups, knownApp.Id)
+		} else {
+			remainingScalables = append(remainingScalables, knownApp)
+		}
+	}
+
+	for _, application := range applications {
+		_, found := knownLookups[application.Id]
+		if !found && application.IsScalable() && application.Instances > 0 {
+			application.InitializeScalable()
+			remainingScalables = append(remainingScalables, application)
+		}
+	}
+
+	*currentScalables = remainingScalables
 }
