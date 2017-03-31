@@ -31,6 +31,7 @@ type Policy struct {
 	Samples   int
 	Operator  string
 	Action    string
+	Step      int
 }
 
 type Task struct {

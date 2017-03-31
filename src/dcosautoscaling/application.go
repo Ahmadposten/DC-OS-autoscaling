@@ -176,12 +176,12 @@ func (a *Application) CalibrateDesired() {
 			switch policy.Action {
 			case SCALE_UP:
 				if a.Desired <= a.Instances && a.Desired < a.Max {
-					a.Desired++
+					a.Desired += policy.Step
 				}
 				break
 			case SCALE_DOWN:
 				if a.Desired >= a.Instances && a.Desired > a.Min {
-					a.Desired--
+					a.Desired -= policy.Step
 				}
 				break
 			}
@@ -340,6 +340,7 @@ func (a *Application) SyncRules() {
 				interval := fmt.Sprintf("AUTOSCALING_%s_RULE_INTERVAL", ruleNumber)
 				action := fmt.Sprintf("AUTOSCALING_%s_RULE_ACTION", ruleNumber)
 				operator := fmt.Sprintf("AUTOSCALING_%s_RULE_OPERATOR", ruleNumber)
+				step := fmt.Sprintf("AUTOSCALING_%s_RULE_STEP", ruleNumber)
 
 				newrule := Policy{}
 
@@ -349,20 +350,28 @@ func (a *Application) SyncRules() {
 				intervalVal, intervalFound := a.Labels[interval]
 				actionVal, actionFound := a.Labels[action]
 				operatorVal, operatorFound := a.Labels[operator]
+				stepVal, stepFound := a.Labels[step]
 
 				if typeFound && thresholdFound &&
 					samplesFound && intervalFound &&
 					actionFound && operatorFound {
 					parsedThreshold, _ := strconv.ParseFloat(thresholdVal, 64)
-					parsedInterval, _ := strconv.ParseInt(intervalVal, 10, 8)
-					parsedSamples, _ := strconv.ParseInt(samplesVal, 10, 8)
+					parsedInterval, _ := strconv.ParseInt(intervalVal, 10, 64)
+					parsedSamples, _ := strconv.ParseInt(samplesVal, 10, 64)
+
+					var parsedStep int64
+					if stepFound {
+						parsedStep, _ = strconv.ParseInt(stepVal, 10, 64)
+					} else {
+						parsedStep = 1
+					}
 
 					newrule.Type,
 						newrule.Threshold, newrule.Samples,
 						newrule.Interval, newrule.Action,
-						newrule.Operator = typeVal, parsedThreshold,
+						newrule.Operator, newrule.Step = typeVal, parsedThreshold,
 						int(parsedSamples), int(parsedInterval),
-						actionVal, operatorVal
+						actionVal, operatorVal, int(parsedStep)
 
 					policies = append(policies, newrule)
 				}
