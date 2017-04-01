@@ -41,13 +41,12 @@ func Call(method string, url string, body string) (string, error) {
 	}
 
 	client := http.Client{
-		Timeout: time.Duration(3 * time.Second),
+		Timeout: time.Duration(500 * time.Millisecond),
 	}
 
 	resp, reqerr := client.Do(req)
 
 	if reqerr != nil {
-		log.Printf("Calling executing http request to %s: ", url, reqerr)
 		return "", reqerr
 	}
 	defer resp.Body.Close()
@@ -55,7 +54,7 @@ func Call(method string, url string, body string) (string, error) {
 	responseString, err := ioutil.ReadAll(resp.Body)
 
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {

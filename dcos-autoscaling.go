@@ -32,7 +32,6 @@ func main() {
 			}(&wg)
 		}
 		wg.Wait()
-		time.Sleep(1 * time.Second)
 	}
 }
 
