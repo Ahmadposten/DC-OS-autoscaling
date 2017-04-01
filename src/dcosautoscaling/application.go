@@ -6,6 +6,7 @@ import (
 	"log"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -243,14 +244,23 @@ func (a *Application) GetStatistics() (Stat, error) {
 	var memValues []float64
 
 	log.Printf("Getting stats of %s", a.Id)
+	var wg sync.WaitGroup
+
+	wg.Add(len(a.Slaves))
 	for _, slave := range a.Slaves {
-		cpuUsage, memoryUsage, err := GetDeltas(slave)
-		if err != nil {
-			continue
-		}
-		cpuValues = append(cpuValues, cpuUsage)
-		memValues = append(memValues, memoryUsage)
+		go func(wg *sync.WaitGroup) {
+			cpuUsage, memoryUsage, err := GetDeltas(slave)
+			log.Print("Deltas are ", cpuUsage, memoryUsage)
+			if err != nil {
+				wg.Done()
+			} else {
+				cpuValues = append(cpuValues, cpuUsage)
+				memValues = append(memValues, memoryUsage)
+				wg.Done()
+			}
+		}(&wg)
 	}
+	wg.Wait()
 	cpuAvarage := Average(cpuValues)
 	memAverage := Average(memValues)
 
